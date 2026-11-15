@@ -16,6 +16,8 @@
   .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:12px; }
   .videoWrap { position:relative; background:#000; border-radius:12px; overflow:hidden; aspect-ratio:16/9; }
   video { width:100%; height:100%; display:block; }
+  #ytBox { position:absolute; inset:0; display:none; }
+  #ytBox iframe { width:100%; height:100%; border:0; display:block; }
   #mask { position:absolute; left:0; right:0; bottom:0; background:#000; display:none; }
   #connect { position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; gap:10px; background:rgba(0,0,0,.85); text-align:center; padding:16px; }
   button, select, .fileBtn { font:inherit; color:var(--text); background:#263044; border:1px solid var(--line); border-radius:8px; padding:9px 12px; cursor:pointer; min-height:42px; }
@@ -62,9 +64,10 @@
   <section>
     <div class="videoWrap">
       <video id="v" src="media/video.mp4" preload="auto" playsinline></video>
+      <div id="ytBox"><div id="yt"></div></div>
       <div id="mask"></div>
       <div id="connect">
-        <div><b>영상을 불러오지 못했습니다.</b><br>내려받은 MP4 파일(media/video.mp4)을 직접 선택해 주세요.</div>
+        <div><b>영상을 불러오지 못했습니다.</b><br>MP4 파일도 유튜브 영상도 열리지 않습니다. 가지고 있는 MP4 파일을 직접 선택해 주세요.</div>
         <label class="fileBtn">📁 MP4 파일 선택<input type="file" id="file2" accept="video/mp4,video/*"></label>
       </div>
     </div>
@@ -199,6 +202,54 @@ try { adj = JSON.parse(localStorage.getItem('shadow-adj-9KBIddUmHDU')) || {}; } 
 const recs = {};        // 문장별 녹음 URL
 let micStream = null, recorder = null;
 
+/* ---------- 재생기: MP4(기본) 또는 유튜브(MP4가 없을 때) ---------- */
+let mode = 'mp4';       // 'mp4' | 'yt' | 'none'
+let yt = null, ytReady = false, ytState = -1, ytLast = 0, ytLastAt = 0, ytGuard = null, fileUrl = null;
+const effRate = () => mode === 'yt' && rate === 0.6 ? 0.5 : rate;   // 유튜브는 0.6배가 없어 0.5배로 대체
+const P = {
+  time() {
+    if (mode !== 'yt' || !ytReady) return v.currentTime;
+    const raw = yt.getCurrentTime(), now = performance.now();
+    if (ytGuard !== null) { if (Math.abs(raw - ytGuard) < 1) ytGuard = null; else return ytGuard; }   // 이동 직후의 옛 시각 무시
+    if (raw !== ytLast) { ytLast = raw; ytLastAt = now; }
+    // 유튜브는 현재 시각을 드문드문 알려 주므로 그 사이는 경과 시간으로 채워 종료 지점을 정확히 잡는다
+    return ytState === 1 ? ytLast + Math.min(0.5, (now - ytLastAt) / 1000 * effRate()) : ytLast;
+  },
+  ended: () => mode === 'yt' ? ytState === 0 : v.ended,
+  seek(t, cb) {
+    if (mode === 'yt') { ytGuard = t; ytLast = t; ytLastAt = performance.now(); yt.seekTo(t, true); if (cb) cb(); return; }
+    if (Math.abs(v.currentTime - t) < 0.005) { if (cb) cb(); return; }
+    if (cb) v.addEventListener('seeked', cb, { once: true });
+    v.currentTime = t;
+  },
+  play() { if (mode === 'yt') { yt.playVideo(); return Promise.resolve(); } return v.play(); },
+  pause() { if (mode === 'yt') { if (ytReady) yt.pauseVideo(); } else v.pause(); },
+  setRate() {
+    if (mode === 'yt') { if (ytReady) yt.setPlaybackRate(effRate()); return; }
+    v.preservesPitch = true; v.mozPreservesPitch = true; v.webkitPreservesPitch = true;
+    v.playbackRate = rate;
+  }
+};
+function loadYT() {
+  if (mode !== 'mp4') return;
+  mode = 'yt'; v.style.display = 'none'; $('ytBox').style.display = 'block';
+  setStatus('MP4 파일이 없어 유튜브 영상을 불러오는 중…');
+  window.onYouTubeIframeAPIReady = () => {
+    yt = new YT.Player('yt', {
+      videoId: '9KBIddUmHDU', width: '100%', height: '100%',
+      playerVars: { controls: 0, rel: 0, playsinline: 1, disablekb: 1, iv_load_policy: 3 },
+      events: {
+        onReady: () => { ytReady = true; drawRates(); setStatus('유튜브 영상으로 재생합니다. 문장을 고르거나 ▶ 듣기를 누르세요.'); },
+        onStateChange: e => { ytState = e.data; if (e.data === 1) ytLastAt = performance.now(); },
+        onError: ytFail
+      }
+    });
+  };
+  const s = document.createElement('script'); s.src = 'https://www.youtube.com/iframe_api'; s.onerror = ytFail;
+  document.head.append(s);
+}
+function ytFail() { cancel(); mode = 'none'; ytReady = false; $('ytBox').style.display = 'none'; showConnect(); }
+
 const segOf = i => { const a = adj[i] || { s: 0, e: 0 }; return { start: Math.max(0, S[i].s + a.s), end: S[i].e + a.e }; };
 const setStatus = t => { $('status').textContent = t; };
 const setPhase = p => document.querySelectorAll('#phase span').forEach(el => el.classList.toggle('now', el.dataset.p === p));
@@ -237,28 +288,27 @@ function select(i) {
   render();
   const el = document.querySelector('.item.cur');
   if (el && window.innerWidth > 900) el.scrollIntoView({ block: 'nearest' });
-  if (v.readyState > 0) v.currentTime = segOf(cur).start;
+  if (mode !== 'yt' && v.readyState > 0) v.currentTime = segOf(cur).start;
 }
 
 /* ---------- 재생 흐름 ---------- */
 function cancel() {
   token++; seg = null; wait = null; run = null; paused = false;
-  v.pause(); stopRec();
+  P.pause(); stopRec();
   setPhase(''); setBar(0); $('pause').textContent = '⏸ 일시정지';
 }
 function playSeg(cb) {
   const my = token, s = segOf(cur);
-  seg = null; v.pause(); applyRate();
-  const go = () => {
+  seg = null; P.pause(); P.setRate();
+  P.seek(s.start, () => {
     if (my !== token) return;
     seg = { start: s.start, end: s.end, cb };
-    v.play().catch(() => { seg = null; setStatus('재생이 막혔습니다. ▶ 듣기를 다시 눌러 주세요.'); });
-  };
-  if (Math.abs(v.currentTime - s.start) < 0.005) go();
-  else { v.addEventListener('seeked', go, { once: true }); v.currentTime = s.start; }
+    P.play().catch(() => { seg = null; setStatus('재생이 막혔습니다. ▶ 듣기를 다시 눌러 주세요.'); });
+  });
 }
 function start(kind) {
-  if (v.readyState === 0 && v.error) { showConnect(); return; }
+  if (mode === 'yt' && !ytReady) { setStatus('유튜브 영상을 불러오는 중입니다. 잠시 후 다시 눌러 주세요.'); return; }
+  if (mode !== 'yt' && v.readyState === 0 && (v.error || mode === 'none')) { showConnect(); return; }
   cancel();
   run = { kind, done: 0 };
   cycle();
@@ -271,7 +321,7 @@ function cycle() {
 }
 function beginWait() {
   const sel = $('waitSel').value, s = segOf(cur);
-  const sec = sel[0] === 'x' ? Math.max(2, (s.end - s.start) / rate * parseFloat(sel.slice(1))) : parseFloat(sel);
+  const sec = sel[0] === 'x' ? Math.max(2, (s.end - s.start) / effRate() * parseFloat(sel.slice(1))) : parseFloat(sel);
   setPhase('wait'); startRec();
   wait = { left: sec * 1000, total: sec * 1000, cb: () => {
     stopRec(); setPhase('relisten'); setStatus('다시 들으며 비교해 보세요' + countText());
@@ -288,7 +338,7 @@ function nextRep() {
 function togglePause() {
   if (!run) return;
   paused = !paused;
-  if (seg) paused ? v.pause() : v.play();
+  if (seg) paused ? P.pause() : P.play();
   if (recorder && recorder.state !== 'inactive') paused ? recorder.pause() : recorder.resume();
   $('pause').textContent = paused ? '▶ 계속' : '⏸ 일시정지';
   if (paused) setStatus('일시정지됨');
@@ -297,8 +347,9 @@ let lastTick = performance.now();
 setInterval(() => {
   const now = performance.now(), dt = now - lastTick; lastTick = now;
   if (seg) {
-    setBar((v.currentTime - seg.start) / (seg.end - seg.start));
-    if (!paused && (v.currentTime >= seg.end || v.ended)) { const cb = seg.cb; seg = null; v.pause(); cb(); }
+    const t = P.time();
+    setBar((t - seg.start) / (seg.end - seg.start));
+    if (!paused && (t >= seg.end || P.ended())) { const cb = seg.cb; seg = null; P.pause(); cb(); }
   } else if (wait && !paused) {
     wait.left -= dt;
     setBar(1 - wait.left / wait.total);
@@ -308,15 +359,14 @@ setInterval(() => {
 }, 20);
 
 /* ---------- 속도 (음높이 유지) ---------- */
-function applyRate() {
-  v.preservesPitch = true; v.mozPreservesPitch = true; v.webkitPreservesPitch = true;
-  v.playbackRate = rate;
+function drawRates() {
+  document.querySelectorAll('#rates button').forEach(o => {
+    o.classList.toggle('on', parseFloat(o.dataset.r) === rate);
+    if (o.dataset.r === '0.6') o.textContent = mode === 'yt' ? '0.5배 (유튜브는 0.6배 없음)' : '0.6배';
+  });
 }
-document.querySelectorAll('#rates button').forEach(b => b.onclick = () => {
-  rate = parseFloat(b.dataset.r); applyRate();
-  document.querySelectorAll('#rates button').forEach(o => o.classList.toggle('on', o === b));
-});
-document.querySelector('#rates button[data-r="1"]').classList.add('on');
+document.querySelectorAll('#rates button').forEach(b => b.onclick = () => { rate = parseFloat(b.dataset.r); P.setRate(); drawRates(); });
+drawRates();
 
 /* ---------- 반복 ---------- */
 function drawRep() {
@@ -354,7 +404,7 @@ $('recPlay').onclick = () => { if (!recs[cur]) return; cancel(); $('recAudio').s
 $('listen').onclick = () => start('listen');
 $('shadow').onclick = () => start('shadow');
 $('pause').onclick = togglePause;
-$('stop').onclick = () => { cancel(); if (v.readyState > 0) v.currentTime = segOf(cur).start; setStatus('정지했습니다.'); };
+$('stop').onclick = () => { cancel(); if (mode !== 'yt' && v.readyState > 0) v.currentTime = segOf(cur).start; setStatus('정지했습니다.'); };
 $('prev').onclick = () => { select(cur - 1); start('listen'); };
 $('next').onclick = () => { select(cur + 1); start('listen'); };
 v.onclick = () => run ? togglePause() : start('listen');
@@ -372,12 +422,16 @@ document.querySelectorAll('[data-adj]').forEach(b => b.onclick = () => {
 
 /* ---------- 로컬 MP4 연결 ---------- */
 function showConnect() { $('connect').style.display = 'flex'; setStatus('영상 파일을 연결해 주세요.'); }
-v.addEventListener('error', showConnect);
-let fileUrl = null;
+// 기본 MP4(media/video.mp4)를 못 열면 유튜브로, 직접 고른 파일을 못 열면 다시 선택 안내
+const onVideoError = () => fileUrl ? showConnect() : loadYT();
+v.addEventListener('error', onVideoError);
+if (v.error) onVideoError();
 function useFile(e) {
   const f = e.target.files[0]; if (!f) return;
   if (!f.type.startsWith('video/')) return setStatus('영상 파일(MP4)만 선택할 수 있습니다.');
   cancel();
+  if (mode === 'yt' && yt) { try { yt.destroy(); } catch (err) {} yt = null; ytReady = false; }
+  mode = 'mp4'; $('ytBox').style.display = 'none'; v.style.display = ''; drawRates();
   if (fileUrl) URL.revokeObjectURL(fileUrl);
   fileUrl = URL.createObjectURL(f);
   v.src = fileUrl; v.load();
