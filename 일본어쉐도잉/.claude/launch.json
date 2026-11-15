@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "shadowing", "runtimeExecutable": "node", "runtimeArgs": ["serve.js"], "port": 8765 }
+  ]
+}

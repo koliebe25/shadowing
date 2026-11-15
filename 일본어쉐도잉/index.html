@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>쉐도잉</title>
+<style>
+  :root { --bg:#10141c; --panel:#1a2130; --line:#2c3648; --text:#e8ecf3; --sub:#9aa7bd; --acc:#ffd23f; --acc2:#4cc2ff; --red:#ff6b6b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:"Pretendard","Malgun Gothic","Apple SD Gothic Neo",sans-serif; line-height:1.5; }
+  header { padding:12px 16px; border-bottom:1px solid var(--line); display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; }
+  header h1 { font-size:17px; margin:0; }
+  header a { color:var(--acc2); font-size:13px; }
+  main { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,1fr); gap:16px; padding:16px; max-width:1400px; margin:0 auto; }
+  @media (max-width:900px) { main { grid-template-columns:1fr; padding:10px; } }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:12px; }
+  .videoWrap { position:relative; background:#000; border-radius:12px; overflow:hidden; aspect-ratio:16/9; }
+  video { width:100%; height:100%; display:block; }
+  #ytBox { position:absolute; inset:0; display:none; }
+  #ytBox iframe { width:100%; height:100%; border:0; display:block; }
+  #mask { position:absolute; left:0; right:0; bottom:0; background:#000; display:none; }
+  #connect { position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; gap:10px; background:rgba(0,0,0,.85); text-align:center; padding:16px; }
+  button, select, .fileBtn { font:inherit; color:var(--text); background:#263044; border:1px solid var(--line); border-radius:8px; padding:9px 12px; cursor:pointer; min-height:42px; }
+  button:hover, .fileBtn:hover { border-color:var(--acc2); }
+  button.on { background:var(--acc); color:#1a1a1a; border-color:var(--acc); font-weight:700; }
+  button.main { background:var(--acc2); color:#08202e; border-color:var(--acc2); font-weight:700; }
+  button:disabled { opacity:.45; cursor:default; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .row + .row { margin-top:10px; }
+  .label { color:var(--sub); font-size:13px; min-width:64px; }
+  #phase { display:flex; gap:6px; margin-top:10px; }
+  #phase span { flex:1; text-align:center; padding:7px 4px; border-radius:8px; background:#222b3b; color:var(--sub); font-size:13px; }
+  #phase span.now { background:var(--acc); color:#1a1a1a; font-weight:700; }
+  #bar { height:6px; background:#222b3b; border-radius:3px; margin-top:8px; overflow:hidden; }
+  #bar i { display:block; height:100%; width:0; background:var(--acc2); }
+  #status { color:var(--sub); font-size:13px; margin-top:6px; min-height:20px; }
+  #curEn { font-size:clamp(22px,3.4vw,34px); font-weight:700; line-height:1.3; }
+  #curR { color:var(--sub); font-size:15px; margin-top:2px; }
+  #curKo { font-size:clamp(17px,2.2vw,22px); color:var(--acc); margin-top:6px; }
+  .hiddenMsg { color:var(--sub); font-size:15px; font-weight:400; font-style:italic; }
+  #notes { margin-top:10px; font-size:14px; }
+  #notes b { color:var(--acc2); }
+  #notes .pron { margin-top:6px; color:var(--sub); }
+  #list { max-height:calc(100vh - 120px); overflow:auto; padding:0; }
+  @media (max-width:900px) { #list { max-height:none; } }
+  .item { padding:10px 12px; border-bottom:1px solid var(--line); cursor:pointer; }
+  .item:hover { background:#222b3b; }
+  .item.cur { background:#2a3550; border-left:4px solid var(--acc); }
+  .item .t { color:var(--sub); font-size:12px; }
+  .item .ko { color:var(--sub); font-size:14px; }
+  #recMsg { color:var(--sub); font-size:13px; margin-top:6px; }
+  #recMsg.err { color:var(--red); font-weight:700; }
+  #scoreBox { margin-top:8px; font-size:14px; }
+  #scoreBox .num { font-size:30px; font-weight:800; color:var(--acc); margin-right:8px; }
+  #scoreBox .ok { color:#6fdc8c; } #scoreBox .miss { color:var(--red); text-decoration:underline; }
+  small.note { color:var(--sub); display:block; margin-top:8px; font-size:12.5px; }
+  input[type=file] { display:none; }
+  input[type=checkbox] { width:18px; height:18px; vertical-align:middle; }
+  label.chk { display:inline-flex; gap:6px; align-items:center; cursor:pointer; padding:6px 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">🎧 쉐도잉</h1>
+  <a id="ytLink" href="#" target="_blank" rel="noopener">유튜브 원본 열기</a>
+  <label class="fileBtn">📁 MP4 파일 선택/재연결<input type="file" id="file" accept="video/mp4,video/*"></label>
+</header>
+
+<main>
+  <section>
+    <div class="videoWrap">
+      <video id="v" src="media/video.mp4" preload="auto" playsinline></video>
+      <div id="ytBox"><div id="yt"></div></div>
+      <div id="mask"></div>
+      <div id="connect">
+        <div><b>영상을 불러오지 못했습니다.</b><br>MP4 파일도 유튜브 영상도 열리지 않습니다. 가지고 있는 MP4 파일을 직접 선택해 주세요.</div>
+        <label class="fileBtn">📁 MP4 파일 선택<input type="file" id="file2" accept="video/mp4,video/*"></label>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:12px">
+      <div id="curNo" class="label"></div>
+      <div id="curEn"></div>
+      <div id="curR"></div>
+      <div id="curKo"></div>
+      <div id="notes"></div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <button id="prev">⏮ 이전</button>
+        <button id="listen" class="main">▶ 듣기</button>
+        <button id="shadow" class="main">🗣 쉐도잉</button>
+        <button id="pause">⏸ 일시정지</button>
+        <button id="stop">⏹ 정지</button>
+        <button id="next">다음 ⏭</button>
+      </div>
+      <div id="phase"><span data-p="listen">① 원본 듣기</span><span data-p="wait">② 따라 말하기</span><span data-p="relisten">③ 다시 듣기</span></div>
+      <div id="bar"><i></i></div>
+      <div id="status">문장을 고르거나 ▶ 듣기를 누르세요.</div>
+    </div>
+
+    <div class="panel">
+      <div class="row"><span class="label">반복</span>
+        <button id="repOn">반복 꺼짐</button>
+        <span id="repCounts">
+          <button data-n="3">3회</button><button data-n="5">5회</button><button data-n="0">무한</button>
+        </span>
+      </div>
+      <div class="row"><span class="label">속도</span>
+        <span id="rates"><button data-r="0.6">0.6배</button><button data-r="0.75">0.75배</button><button data-r="1">1배</button><button data-r="1.25">1.25배</button></span>
+      </div>
+      <div class="row"><span class="label">대기 시간</span>
+        <select id="waitSel">
+          <option value="x1.2">문장 길이 × 1.2</option>
+          <option value="x1.5" selected>문장 길이 × 1.5</option>
+          <option value="x2">문장 길이 × 2</option>
+          <option value="3">3초</option><option value="5">5초</option><option value="8">8초</option><option value="12">12초</option>
+        </select>
+      </div>
+      <div class="row"><span class="label">녹음</span>
+        <button id="recOn">🎙 쉐도잉 때 자동 녹음: 꺼짐</button>
+        <button id="recNow">⏺ 지금 녹음</button>
+        <button id="recPlay" disabled>🔊 내 녹음 듣기</button>
+        <audio id="recAudio"></audio>
+      </div>
+      <div id="recMsg"></div>
+      <div id="scoreBox"></div>
+      <div class="row"><span class="label">자막</span>
+        <label class="chk"><input type="checkbox" id="showEn" checked> <span id="origLabel">원문</span></label>
+        <label class="chk"><input type="checkbox" id="showKo" checked> 한국어 번역</label>
+      </div>
+      <div class="row"><span class="label">가림막</span>
+        <label class="chk"><input type="checkbox" id="maskOn"> 영상 아래쪽 가리기</label>
+        <input type="range" id="maskH" min="8" max="40" value="18" aria-label="가림막 높이">
+      </div>
+      <small class="note">영상 화면에 처음부터 박혀 있는 자막은 앱에서 지울 수 없습니다. 필요하면 가림막으로 가리세요.</small>
+      <div class="row"><span class="label">구간 보정</span>
+        <button data-adj="s,-0.1">시작 −0.1</button><button data-adj="s,0.1">시작 +0.1</button>
+        <button data-adj="e,-0.1">끝 −0.1</button><button data-adj="e,0.1">끝 +0.1</button>
+        <span id="adjInfo" class="label"></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="list"></section>
+</main>
+
+<script src="data.js"></script>
+<script>
+// 문장 데이터는 data.js(window.SHADOW)에 있다. 이 파일은 영상마다 바꾸지 않는다.
+const D = window.SHADOW, S = D.sentences;
+
+const $ = id => document.getElementById(id);
+const v = $('v');
+const fmt = t => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0');
+document.title = D.langName + ' 쉐도잉 — ' + D.title;
+$('title').textContent = '🎧 ' + D.langName + ' 쉐도잉 · ' + D.title;
+$('ytLink').href = 'https://www.youtube.com/watch?v=' + D.videoId;
+$('origLabel').textContent = D.langName + ' 원문';
+
+let cur = 0, rate = 1, repOn = false, repN = 3;
+let token = 0;          // 실행 중인 흐름 식별용 (정지·문장 변경 시 증가)
+let seg = null;         // 재생 중인 구간 {start,end,cb}
+let wait = null;        // 따라 말하기 대기 {left,total,cb}
+let run = null;         // {kind:'listen'|'shadow', done}
+let paused = false;
+let adj = {};           // 구간 보정값 {문장번호:{s,e}}
+try { adj = JSON.parse(localStorage.getItem('shadow-adj-' + D.videoId)) || {}; } catch (e) {}
+const recs = {};        // 문장별 녹음 URL
+let micStream = null, recorder = null;
+
+/* ---------- 재생기: MP4(기본) 또는 유튜브(MP4가 없을 때) ---------- */
+let mode = 'mp4';       // 'mp4' | 'yt' | 'none'
+let yt = null, ytReady = false, ytState = -1, ytLast = 0, ytLastAt = 0, ytGuard = null, fileUrl = null;
+const effRate = () => mode === 'yt' && rate === 0.6 ? 0.5 : rate;   // 유튜브는 0.6배가 없어 0.5배로 대체
+const P = {
+  time() {
+    if (mode !== 'yt' || !ytReady) return v.currentTime;
+    const raw = yt.getCurrentTime(), now = performance.now();
+    if (ytGuard !== null) { if (Math.abs(raw - ytGuard) < 1) ytGuard = null; else return ytGuard; }   // 이동 직후의 옛 시각 무시
+    if (raw !== ytLast) { ytLast = raw; ytLastAt = now; }
+    // 유튜브는 현재 시각을 드문드문 알려 주므로 그 사이는 경과 시간으로 채워 종료 지점을 정확히 잡는다
+    return ytState === 1 ? ytLast + Math.min(0.5, (now - ytLastAt) / 1000 * effRate()) : ytLast;
+  },
+  ended: () => mode === 'yt' ? ytState === 0 : v.ended,
+  seek(t, cb) {
+    if (mode === 'yt') { ytGuard = t; ytLast = t; ytLastAt = performance.now(); yt.seekTo(t, true); if (cb) cb(); return; }
+    if (Math.abs(v.currentTime - t) < 0.005) { if (cb) cb(); return; }
+    if (cb) v.addEventListener('seeked', cb, { once: true });
+    v.currentTime = t;
+  },
+  play() { if (mode === 'yt') { yt.playVideo(); return Promise.resolve(); } return v.play(); },
+  pause() { if (mode === 'yt') { if (ytReady) yt.pauseVideo(); } else v.pause(); },
+  setRate() {
+    if (mode === 'yt') { if (ytReady) yt.setPlaybackRate(effRate()); return; }
+    v.preservesPitch = true; v.mozPreservesPitch = true; v.webkitPreservesPitch = true;
+    v.playbackRate = rate;
+  }
+};
+function loadYT() {
+  if (mode !== 'mp4') return;
+  mode = 'yt'; v.style.display = 'none'; $('ytBox').style.display = 'block';
+  setStatus('MP4 파일이 없어 유튜브 영상을 불러오는 중…');
+  window.onYouTubeIframeAPIReady = () => {
+    yt = new YT.Player('yt', {
+      videoId: D.videoId, width: '100%', height: '100%',
+      playerVars: { controls: 0, rel: 0, playsinline: 1, disablekb: 1, iv_load_policy: 3 },
+      events: {
+        onReady: () => { ytReady = true; drawRates(); setStatus('유튜브 영상으로 재생합니다. 문장을 고르거나 ▶ 듣기를 누르세요.'); },
+        onStateChange: e => { ytState = e.data; if (e.data === 1) ytLastAt = performance.now(); },
+        onError: ytFail
+      }
+    });
+  };
+  const s = document.createElement('script'); s.src = 'https://www.youtube.com/iframe_api'; s.onerror = ytFail;
+  document.head.append(s);
+}
+function ytFail() { cancel(); mode = 'none'; ytReady = false; $('ytBox').style.display = 'none'; showConnect(); }
+
+const segOf = i => { const a = adj[i] || { s: 0, e: 0 }; return { start: Math.max(0, S[i].s + a.s), end: S[i].e + a.e }; };
+const setStatus = t => { $('status').textContent = t; };
+const setPhase = p => document.querySelectorAll('#phase span').forEach(el => el.classList.toggle('now', el.dataset.p === p));
+const setBar = r => { $('bar').firstElementChild.style.width = Math.max(0, Math.min(1, r)) * 100 + '%'; };
+
+/* ---------- 화면 그리기 (숨김 설정이면 글자를 아예 넣지 않음) ---------- */
+function render() {
+  const en = $('showEn').checked, ko = $('showKo').checked, x = S[cur];
+  $('curNo').textContent = `문장 ${cur + 1} / ${S.length} · ${fmt(x.s)}`;
+  $('curEn').innerHTML = ''; $('curKo').innerHTML = ''; $('notes').innerHTML = '';
+  if (en) $('curEn').textContent = x.en; else $('curEn').innerHTML = '<span class="hiddenMsg">원문 숨김 — 소리에 집중해 보세요</span>';
+  $('curR').textContent = en && x.r ? x.r : '';
+  if (ko) $('curKo').textContent = x.ko; else $('curKo').innerHTML = '<span class="hiddenMsg">한국어 번역 숨김</span>';
+  if (en && ko) {
+    x.n.forEach(([a, b]) => { const d = document.createElement('div'); const s = document.createElement('b'); s.textContent = a; d.append(s, ' — ' + b); $('notes').append(d); });
+  } else {
+    $('notes').innerHTML = '<span class="hiddenMsg">단어·표현 해설은 원문과 한국어를 모두 켜면 보입니다.</span>';
+  }
+  if (en && x.p) { const d = document.createElement('div'); d.className = 'pron'; d.textContent = '🔈 발음: ' + x.p; $('notes').append(d); }
+
+  const list = $('list'); list.innerHTML = '';
+  S.forEach((y, i) => {
+    const d = document.createElement('div'); d.className = 'item' + (i === cur ? ' cur' : '');
+    const t = document.createElement('div'); t.className = 't'; t.textContent = `${i + 1} · ${fmt(y.s)}` + (recs[i] ? ' · 🎙 ' + (recs[i].score != null ? recs[i].score + '점' : '녹음 있음') : ''); d.append(t);
+    if (en) { const e = document.createElement('div'); e.textContent = y.en; d.append(e); }
+    if (ko) { const k = document.createElement('div'); k.className = 'ko'; k.textContent = y.ko; d.append(k); }
+    d.onclick = () => { select(i); start('listen'); };
+    list.append(d);
+  });
+  $('recPlay').disabled = !recs[cur];
+  const box = $('scoreBox'), r = recs[cur]; box.innerHTML = '';
+  if (r && r.score != null) {
+    const n = document.createElement('span'); n.className = 'num'; n.textContent = r.score + '점';
+    box.append(n, r.score >= 90 ? '훌륭해요!' : r.score >= 70 ? '좋아요. 빨간 단어만 다시 연습해 보세요.' : '원본을 한 번 더 듣고 다시 도전해 보세요.');
+    const h = document.createElement('div'); h.textContent = '내 말이 이렇게 들렸어요: ' + r.heard; box.append(h);
+    if (en) {
+      const m = document.createElement('div'); m.append('원문 대조: ');
+      r.marks.forEach(([w, ok]) => { const s = document.createElement('span'); s.className = ok ? 'ok' : 'miss'; s.textContent = w; m.append(s, noSpace ? '' : ' '); });
+      box.append(m);
+    }
+    const note = document.createElement('small'); note.className = 'note';
+    note.textContent = '점수는 음성 인식이 알아들은 단어가 원문과 일치하는 비율입니다. 억양·강세까지 평가하는 정밀 발음 채점은 아닙니다.';
+    box.append(note);
+  } else if (r) box.textContent = r.note;
+  const a = adj[cur] || { s: 0, e: 0 };
+  $('adjInfo').textContent = `시작 ${a.s >= 0 ? '+' : ''}${a.s.toFixed(1)} / 끝 ${a.e >= 0 ? '+' : ''}${a.e.toFixed(1)}초`;
+}
+function select(i) {
+  cancel();
+  cur = (i + S.length) % S.length;
+  render();
+  const el = document.querySelector('.item.cur');
+  if (el && window.innerWidth > 900) el.scrollIntoView({ block: 'nearest' });
+  if (mode !== 'yt' && v.readyState > 0) v.currentTime = segOf(cur).start;
+}
+
+/* ---------- 재생 흐름 ---------- */
+function cancel() {
+  token++; seg = null; wait = null; run = null; paused = false;
+  P.pause(); stopRec();
+  setPhase(''); setBar(0); $('pause').textContent = '⏸ 일시정지';
+}
+function playSeg(cb) {
+  const my = token, s = segOf(cur);
+  seg = null; P.pause(); P.setRate();
+  P.seek(s.start, () => {
+    if (my !== token) return;
+    seg = { start: s.start, end: s.end, cb };
+    P.play().catch(() => { seg = null; setStatus('재생이 막혔습니다. ▶ 듣기를 다시 눌러 주세요.'); });
+  });
+}
+function start(kind) {
+  if (mode === 'yt' && !ytReady) { setStatus('유튜브 영상을 불러오는 중입니다. 잠시 후 다시 눌러 주세요.'); return; }
+  if (mode !== 'yt' && v.readyState === 0 && (v.error || mode === 'none')) { showConnect(); return; }
+  cancel();
+  run = { kind, done: 0 };
+  cycle();
+}
+function total() { return repOn ? repN : 1; }   // 0 = 무한
+function countText() { const t = total(); return t === 1 ? '' : ` (${run.done + 1}/${t === 0 ? '∞' : t})`; }
+function cycle() {
+  setPhase('listen'); setStatus((run.kind === 'shadow' ? '원본을 잘 들어 보세요' : '듣는 중') + countText());
+  playSeg(() => run.kind === 'shadow' ? beginWait() : nextRep());
+}
+function beginWait() {
+  const sel = $('waitSel').value, s = segOf(cur);
+  const sec = sel[0] === 'x' ? Math.max(2, (s.end - s.start) / effRate() * parseFloat(sel.slice(1))) : parseFloat(sel);
+  setPhase('wait'); if (autoRec) startRec();
+  wait = { left: sec * 1000, total: sec * 1000, cb: () => {
+    stopRec(); setPhase('relisten'); setStatus('다시 들으며 비교해 보세요' + countText());
+    playSeg(nextRep);
+  } };
+}
+function nextRep() {
+  run.done++;
+  const t = total();
+  if (t === 0 || run.done < t) return cycle();
+  run = null; setPhase(''); setBar(0);
+  setStatus('끝. 다시 듣거나 다음 문장으로 넘어가세요.');
+}
+function togglePause() {
+  if (!run) return;
+  paused = !paused;
+  if (seg) paused ? P.pause() : P.play();
+  if (recorder && recorder.state !== 'inactive') paused ? recorder.pause() : recorder.resume();
+  $('pause').textContent = paused ? '▶ 계속' : '⏸ 일시정지';
+  if (paused) setStatus('일시정지됨');
+}
+let lastTick = performance.now();
+setInterval(() => {
+  const now = performance.now(), dt = now - lastTick; lastTick = now;
+  if (seg) {
+    const t = P.time();
+    setBar((t - seg.start) / (seg.end - seg.start));
+    if (!paused && (t >= seg.end || P.ended())) { const cb = seg.cb; seg = null; P.pause(); cb(); }
+  } else if (wait && !paused) {
+    wait.left -= dt;
+    setBar(1 - wait.left / wait.total);
+    setStatus(`따라 말하세요 — ${Math.max(0, wait.left / 1000).toFixed(1)}초 남음` + (recorder ? ' · 🔴 녹음 중' : '') + countText());
+    if (wait.left <= 0) { const cb = wait.cb; wait = null; cb(); }
+  }
+}, 20);
+
+/* ---------- 속도 (음높이 유지) ---------- */
+function drawRates() {
+  document.querySelectorAll('#rates button').forEach(o => {
+    o.classList.toggle('on', parseFloat(o.dataset.r) === rate);
+    if (o.dataset.r === '0.6') o.textContent = mode === 'yt' ? '0.5배 (유튜브는 0.6배 없음)' : '0.6배';
+  });
+}
+document.querySelectorAll('#rates button').forEach(b => b.onclick = () => { rate = parseFloat(b.dataset.r); P.setRate(); drawRates(); });
+drawRates();
+
+/* ---------- 반복 ---------- */
+function drawRep() {
+  $('repOn').textContent = repOn ? '반복 켜짐' : '반복 꺼짐'; $('repOn').classList.toggle('on', repOn);
+  document.querySelectorAll('#repCounts button').forEach(o => { o.classList.toggle('on', repOn && +o.dataset.n === repN); o.disabled = !repOn; });
+}
+$('repOn').onclick = () => { repOn = !repOn; drawRep(); };
+document.querySelectorAll('#repCounts button').forEach(b => b.onclick = () => { repN = +b.dataset.n; drawRep(); });
+drawRep();
+
+/* ---------- 녹음 ---------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;   // 점수 계산용 음성 인식 (크롬·엣지)
+let autoRec = false, manual = false, sr = null;
+const recMsg = (t, err) => { $('recMsg').textContent = t; $('recMsg').classList.toggle('err', !!err); };
+function drawRec() {
+  $('recOn').textContent = '🎙 쉐도잉 때 자동 녹음: ' + (autoRec ? '켜짐' : '꺼짐'); $('recOn').classList.toggle('on', autoRec);
+  $('recNow').textContent = manual ? '⏹ 녹음 끝' : '⏺ 지금 녹음'; $('recNow').classList.toggle('on', manual);
+}
+async function enableMic() {
+  if (micStream) return true;
+  if (!window.isSecureContext) { recMsg('⚠ 녹음은 https 주소나 localhost에서만 됩니다. 「앱 실행.bat」이나 배포 사이트 주소로 열어 주세요.', true); return false; }
+  if (!navigator.mediaDevices || !window.MediaRecorder) { recMsg('⚠ 이 브라우저는 녹음을 지원하지 않습니다. 크롬이나 엣지에서 열어 주세요.', true); return false; }
+  recMsg('마이크 권한을 요청하는 중… 브라우저 창 위쪽에 뜨는 「허용」을 눌러 주세요.');
+  try { micStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (e) {
+    const why = {
+      NotAllowedError: '마이크 권한이 막혀 있습니다. 주소창 왼쪽 아이콘(사이트 설정)에서 마이크를 「허용」으로 바꾸고 새로 고침 해 주세요. 앱 안에 내장된 브라우저라면 크롬·엣지에서 여세요.',
+      NotFoundError: '연결된 마이크를 찾지 못했습니다. 마이크를 연결한 뒤 다시 눌러 주세요.',
+      NotReadableError: '다른 프로그램이 마이크를 쓰고 있어 열 수 없습니다.'
+    }[e.name] || '마이크를 열 수 없습니다 (' + e.name + ').';
+    recMsg('⚠ ' + why, true); return false;
+  }
+  recMsg(SR ? '마이크 연결됨.' : '마이크 연결됨. 이 브라우저는 음성 인식이 없어 점수는 나오지 않습니다 (크롬·엣지 권장).');
+  return true;
+}
+$('recOn').onclick = async () => {
+  if (autoRec) { autoRec = false; recMsg('자동 녹음을 껐습니다.'); }
+  else if (await enableMic()) { autoRec = true; recMsg('켜짐 — 쉐도잉의 「② 따라 말하기」 단계에서 자동으로 녹음하고 점수를 냅니다.'); }
+  drawRec();
+};
+$('recNow').onclick = async () => {
+  if (manual) { stopRec(); setStatus('녹음을 마쳤습니다. 🔊 내 녹음 듣기로 들어 보세요.'); return; }
+  if (!await enableMic()) return;
+  cancel(); manual = true; startRec(); drawRec();
+  setStatus('🔴 녹음 중 — 문장을 말한 뒤 「⏹ 녹음 끝」을 누르세요.');
+};
+
+// 점수: 음성 인식이 알아들은 단어가 원문 단어와 순서대로 얼마나 일치하는지 (0~100)
+// 띄어쓰기가 없는 언어(일본어·중국어·태국어 등)는 글자 단위로, 나머지는 단어 단위로 비교한다
+const noSpace = /^(ja|zh|th|lo|km|my)/i.test(D.lang);
+const alias = Object.fromEntries((D.aliases || []).map(([x, y]) => [x.toLowerCase(), y.toLowerCase()]));
+const words = s => {
+  s = s.toLowerCase().normalize('NFKC').replace(/[’`]/g, "'").replace(/[^\p{L}\p{M}\p{N}' ]+/gu, ' ');
+  if (noSpace) { for (const k in alias) s = s.split(k).join(alias[k]); return [...s.replace(/\s+/g, '')]; }
+  return s.split(/\s+/).filter(Boolean).flatMap(w => alias[w] ? alias[w].split(' ') : [w]);
+};
+function scoreOf(target, heard) {
+  const a = words(target), b = words(heard), L = a.map(() => new Array(b.length + 1).fill(0)); L.push(new Array(b.length + 1).fill(0));
+  for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--)
+    L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const marks = []; let i = 0, j = 0;
+  while (i < a.length) {
+    if (j < b.length && a[i] === b[j]) { marks.push([a[i], true]); i++; j++; }
+    else if (j < b.length && L[i][j + 1] >= L[i + 1][j]) j++;
+    else { marks.push([a[i], false]); i++; }
+  }
+  return { score: Math.round(L[0][0] / a.length * 100), marks };
+}
+function startRec() {
+  if (!micStream) return;
+  const idx = cur, chunks = [], job = { url: null, srDone: !SR, heard: [], err: '' };
+  const done = () => {
+    if (!job.url || !job.srDone || job.finished) return;
+    job.finished = true;
+    const text = job.heard.join(' ').trim(), r = { url: job.url };
+    if (!SR) r.note = '이 브라우저는 음성 인식이 없어 점수를 낼 수 없습니다. 녹음 듣기는 됩니다.';
+    else if (text) Object.assign(r, scoreOf(S[idx].en, text), { heard: text });
+    else r.note = job.err === 'not-allowed' || job.err === 'service-not-allowed' ? '음성 인식 권한이 막혀 점수를 내지 못했습니다. 녹음 듣기는 됩니다.'
+      : job.err === 'network' ? '음성 인식 서버에 연결하지 못해 점수를 내지 못했습니다.'
+      : '말소리를 알아듣지 못해 점수를 내지 못했습니다. 조금 더 크게, 마이크 가까이에서 말해 보세요.';
+    if (recs[idx]) URL.revokeObjectURL(recs[idx].url);
+    recs[idx] = r; render();
+  };
+  try { recorder = new MediaRecorder(micStream); } catch (e) { recorder = null; recMsg('⚠ 녹음을 시작하지 못했습니다.', true); return; }
+  recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  recorder.onstop = () => { if (!chunks.length) return; job.url = URL.createObjectURL(new Blob(chunks, { type: chunks[0].type })); done();
+    setTimeout(() => { job.srDone = true; done(); }, 4000);   // 음성 인식이 끝났다는 신호가 안 와도 녹음은 남긴다
+  };
+  recorder.start();
+  if (SR) {
+    try {
+      sr = new SR(); sr.lang = D.lang; sr.continuous = true; sr.interimResults = false;
+      sr.onresult = e => { for (let k = e.resultIndex; k < e.results.length; k++) if (e.results[k].isFinal) job.heard.push(e.results[k][0].transcript); };
+      sr.onerror = e => { job.err = e.error; };
+      sr.onend = () => { job.srDone = true; done(); };
+      sr.start();
+    } catch (e) { sr = null; job.srDone = true; }
+  }
+}
+function stopRec() {
+  if (recorder && recorder.state !== 'inactive') recorder.stop();
+  recorder = null;
+  if (sr) { try { sr.stop(); } catch (e) {} sr = null; }
+  manual = false; drawRec();
+}
+$('recPlay').onclick = () => { if (!recs[cur]) return; cancel(); $('recAudio').src = recs[cur].url; $('recAudio').play(); setStatus('내 녹음을 재생합니다.'); };
+drawRec();
+
+/* ---------- 버튼 ---------- */
+$('listen').onclick = () => start('listen');
+$('shadow').onclick = () => start('shadow');
+$('pause').onclick = togglePause;
+$('stop').onclick = () => { cancel(); if (mode !== 'yt' && v.readyState > 0) v.currentTime = segOf(cur).start; setStatus('정지했습니다.'); };
+$('prev').onclick = () => { select(cur - 1); start('listen'); };
+$('next').onclick = () => { select(cur + 1); start('listen'); };
+v.onclick = () => run ? togglePause() : start('listen');
+$('showEn').onchange = $('showKo').onchange = render;
+function drawMask() { $('mask').style.display = $('maskOn').checked ? 'block' : 'none'; $('mask').style.height = $('maskH').value + '%'; }
+$('maskOn').onchange = $('maskH').oninput = drawMask;
+document.querySelectorAll('[data-adj]').forEach(b => b.onclick = () => {
+  const [k, d] = b.dataset.adj.split(','), a = adj[cur] || { s: 0, e: 0 };
+  a[k] = Math.round((a[k] + parseFloat(d)) * 10) / 10;
+  if (S[cur].e + a.e - (S[cur].s + a.s) < 0.3) return;   // 구간이 너무 짧아지지 않게
+  adj[cur] = a;
+  try { localStorage.setItem('shadow-adj-' + D.videoId, JSON.stringify(adj)); } catch (e) {}
+  render(); start('listen');
+});
+
+/* ---------- 로컬 MP4 연결 ---------- */
+function showConnect() { $('connect').style.display = 'flex'; setStatus('영상 파일을 연결해 주세요.'); }
+// 기본 MP4(media/video.mp4)를 못 열면 유튜브로, 직접 고른 파일을 못 열면 다시 선택 안내
+const onVideoError = () => fileUrl ? showConnect() : loadYT();
+v.addEventListener('error', onVideoError);
+if (v.error) onVideoError();
+function useFile(e) {
+  const f = e.target.files[0]; if (!f) return;
+  if (!f.type.startsWith('video/')) return setStatus('영상 파일(MP4)만 선택할 수 있습니다.');
+  cancel();
+  if (mode === 'yt' && yt) { try { yt.destroy(); } catch (err) {} yt = null; ytReady = false; }
+  mode = 'mp4'; $('ytBox').style.display = 'none'; v.style.display = ''; drawRates();
+  if (fileUrl) URL.revokeObjectURL(fileUrl);
+  fileUrl = URL.createObjectURL(f);
+  v.src = fileUrl; v.load();
+  $('connect').style.display = 'none';
+  v.addEventListener('loadedmetadata', () => {
+    v.currentTime = segOf(cur).start;
+    setStatus(v.duration < S[S.length - 1].e ? '⚠ 이 파일은 문장 구간보다 짧습니다. 다른 영상일 수 있어요.' : `「${f.name}」 연결됨. ▶ 듣기를 누르세요.`);
+  }, { once: true });
+  e.target.value = '';
+}
+$('file').onchange = $('file2').onchange = useFile;
+
+render();
+</script>
+</body>
+</html>
