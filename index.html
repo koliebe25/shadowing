@@ -47,6 +47,11 @@
   .item.cur { background:#2a3550; border-left:4px solid var(--acc); }
   .item .t { color:var(--sub); font-size:12px; }
   .item .ko { color:var(--sub); font-size:14px; }
+  #recMsg { color:var(--sub); font-size:13px; margin-top:6px; }
+  #recMsg.err { color:var(--red); font-weight:700; }
+  #scoreBox { margin-top:8px; font-size:14px; }
+  #scoreBox .num { font-size:30px; font-weight:800; color:var(--acc); margin-right:8px; }
+  #scoreBox .ok { color:#6fdc8c; } #scoreBox .miss { color:var(--red); text-decoration:underline; }
   small.note { color:var(--sub); display:block; margin-top:8px; font-size:12.5px; }
   input[type=file] { display:none; }
   input[type=checkbox] { width:18px; height:18px; vertical-align:middle; }
@@ -112,10 +117,13 @@
         </select>
       </div>
       <div class="row"><span class="label">녹음</span>
-        <label class="chk"><input type="checkbox" id="recOn"> 따라 말할 때 내 목소리 녹음</label>
+        <button id="recOn">🎙 쉐도잉 때 자동 녹음: 꺼짐</button>
+        <button id="recNow">⏺ 지금 녹음</button>
         <button id="recPlay" disabled>🔊 내 녹음 듣기</button>
         <audio id="recAudio"></audio>
       </div>
+      <div id="recMsg"></div>
+      <div id="scoreBox"></div>
       <div class="row"><span class="label">자막</span>
         <label class="chk"><input type="checkbox" id="showEn" checked> 영어 원문</label>
         <label class="chk"><input type="checkbox" id="showKo" checked> 한국어 번역</label>
@@ -272,13 +280,27 @@ function render() {
   const list = $('list'); list.innerHTML = '';
   S.forEach((y, i) => {
     const d = document.createElement('div'); d.className = 'item' + (i === cur ? ' cur' : '');
-    const t = document.createElement('div'); t.className = 't'; t.textContent = `${i + 1} · ${fmt(y.s)}` + (recs[i] ? ' · 🎙 녹음 있음' : ''); d.append(t);
+    const t = document.createElement('div'); t.className = 't'; t.textContent = `${i + 1} · ${fmt(y.s)}` + (recs[i] ? ' · 🎙 ' + (recs[i].score != null ? recs[i].score + '점' : '녹음 있음') : ''); d.append(t);
     if (en) { const e = document.createElement('div'); e.textContent = y.en; d.append(e); }
     if (ko) { const k = document.createElement('div'); k.className = 'ko'; k.textContent = y.ko; d.append(k); }
     d.onclick = () => { select(i); start('listen'); };
     list.append(d);
   });
   $('recPlay').disabled = !recs[cur];
+  const box = $('scoreBox'), r = recs[cur]; box.innerHTML = '';
+  if (r && r.score != null) {
+    const n = document.createElement('span'); n.className = 'num'; n.textContent = r.score + '점';
+    box.append(n, r.score >= 90 ? '훌륭해요!' : r.score >= 70 ? '좋아요. 빨간 단어만 다시 연습해 보세요.' : '원본을 한 번 더 듣고 다시 도전해 보세요.');
+    const h = document.createElement('div'); h.textContent = '내 말이 이렇게 들렸어요: ' + r.heard; box.append(h);
+    if (en) {
+      const m = document.createElement('div'); m.append('원문 대조: ');
+      r.marks.forEach(([w, ok]) => { const s = document.createElement('span'); s.className = ok ? 'ok' : 'miss'; s.textContent = w; m.append(s, ' '); });
+      box.append(m);
+    }
+    const note = document.createElement('small'); note.className = 'note';
+    note.textContent = '점수는 음성 인식이 알아들은 단어가 원문과 일치하는 비율입니다. 억양·강세까지 평가하는 정밀 발음 채점은 아닙니다.';
+    box.append(note);
+  } else if (r) box.textContent = r.note;
   const a = adj[cur] || { s: 0, e: 0 };
   $('adjInfo').textContent = `시작 ${a.s >= 0 ? '+' : ''}${a.s.toFixed(1)} / 끝 ${a.e >= 0 ? '+' : ''}${a.e.toFixed(1)}초`;
 }
@@ -322,7 +344,7 @@ function cycle() {
 function beginWait() {
   const sel = $('waitSel').value, s = segOf(cur);
   const sec = sel[0] === 'x' ? Math.max(2, (s.end - s.start) / effRate() * parseFloat(sel.slice(1))) : parseFloat(sel);
-  setPhase('wait'); startRec();
+  setPhase('wait'); if (autoRec) startRec();
   wait = { left: sec * 1000, total: sec * 1000, cb: () => {
     stopRec(); setPhase('relisten'); setStatus('다시 들으며 비교해 보세요' + countText());
     playSeg(nextRep);
@@ -378,27 +400,97 @@ document.querySelectorAll('#repCounts button').forEach(b => b.onclick = () => { 
 drawRep();
 
 /* ---------- 녹음 ---------- */
-$('recOn').onchange = async () => {
-  if (!$('recOn').checked) { if (micStream) micStream.getTracks().forEach(t => t.stop()); micStream = null; return; }
-  if (!navigator.mediaDevices || !window.MediaRecorder) { $('recOn').checked = false; return setStatus('이 브라우저에서는 녹음을 쓸 수 없습니다. (크롬·엣지에서 「앱 실행.bat」으로 열어 주세요)'); }
-  try { micStream = await navigator.mediaDevices.getUserMedia({ audio: true }); setStatus('마이크 연결됨. 쉐도잉의 「따라 말하기」 단계에서 자동으로 녹음합니다.'); }
-  catch (e) { $('recOn').checked = false; setStatus('마이크를 쓸 수 없습니다. 브라우저 주소창의 마이크 권한을 허용해 주세요.'); }
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;   // 점수 계산용 음성 인식 (크롬·엣지)
+let autoRec = false, manual = false, sr = null;
+const recMsg = (t, err) => { $('recMsg').textContent = t; $('recMsg').classList.toggle('err', !!err); };
+function drawRec() {
+  $('recOn').textContent = '🎙 쉐도잉 때 자동 녹음: ' + (autoRec ? '켜짐' : '꺼짐'); $('recOn').classList.toggle('on', autoRec);
+  $('recNow').textContent = manual ? '⏹ 녹음 끝' : '⏺ 지금 녹음'; $('recNow').classList.toggle('on', manual);
+}
+async function enableMic() {
+  if (micStream) return true;
+  if (!window.isSecureContext) { recMsg('⚠ 녹음은 https 주소나 localhost에서만 됩니다. 「앱 실행.bat」이나 배포 사이트 주소로 열어 주세요.', true); return false; }
+  if (!navigator.mediaDevices || !window.MediaRecorder) { recMsg('⚠ 이 브라우저는 녹음을 지원하지 않습니다. 크롬이나 엣지에서 열어 주세요.', true); return false; }
+  recMsg('마이크 권한을 요청하는 중… 브라우저 창 위쪽에 뜨는 「허용」을 눌러 주세요.');
+  try { micStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (e) {
+    const why = {
+      NotAllowedError: '마이크 권한이 막혀 있습니다. 주소창 왼쪽 아이콘(사이트 설정)에서 마이크를 「허용」으로 바꾸고 새로 고침 해 주세요. 앱 안에 내장된 브라우저라면 크롬·엣지에서 여세요.',
+      NotFoundError: '연결된 마이크를 찾지 못했습니다. 마이크를 연결한 뒤 다시 눌러 주세요.',
+      NotReadableError: '다른 프로그램이 마이크를 쓰고 있어 열 수 없습니다.'
+    }[e.name] || '마이크를 열 수 없습니다 (' + e.name + ').';
+    recMsg('⚠ ' + why, true); return false;
+  }
+  recMsg(SR ? '마이크 연결됨.' : '마이크 연결됨. 이 브라우저는 음성 인식이 없어 점수는 나오지 않습니다 (크롬·엣지 권장).');
+  return true;
+}
+$('recOn').onclick = async () => {
+  if (autoRec) { autoRec = false; recMsg('자동 녹음을 껐습니다.'); }
+  else if (await enableMic()) { autoRec = true; recMsg('켜짐 — 쉐도잉의 「② 따라 말하기」 단계에서 자동으로 녹음하고 점수를 냅니다.'); }
+  drawRec();
 };
+$('recNow').onclick = async () => {
+  if (manual) { stopRec(); setStatus('녹음을 마쳤습니다. 🔊 내 녹음 듣기로 들어 보세요.'); return; }
+  if (!await enableMic()) return;
+  cancel(); manual = true; startRec(); drawRec();
+  setStatus('🔴 녹음 중 — 문장을 말한 뒤 「⏹ 녹음 끝」을 누르세요.');
+};
+
+// 점수: 음성 인식이 알아들은 단어가 원문 단어와 순서대로 얼마나 일치하는지 (0~100)
+const words = s => s.toLowerCase().replace(/[’`]/g, "'").replace(/\b22\b/g, 'twenty two').replace(/gimme/g, 'give me')
+  .replace(/gonna/g, 'going to').replace(/alright/g, 'all right').replace(/\bya\b/g, 'you').replace(/mister/g, 'mr')
+  .replace(/[^a-z' ]+/g, ' ').split(/\s+/).filter(Boolean);
+function scoreOf(target, heard) {
+  const a = words(target), b = words(heard), L = a.map(() => new Array(b.length + 1).fill(0)); L.push(new Array(b.length + 1).fill(0));
+  for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--)
+    L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const marks = []; let i = 0, j = 0;
+  while (i < a.length) {
+    if (j < b.length && a[i] === b[j]) { marks.push([a[i], true]); i++; j++; }
+    else if (j < b.length && L[i][j + 1] >= L[i + 1][j]) j++;
+    else { marks.push([a[i], false]); i++; }
+  }
+  return { score: Math.round(L[0][0] / a.length * 100), marks };
+}
 function startRec() {
   if (!micStream) return;
-  const idx = cur, chunks = [];
-  try { recorder = new MediaRecorder(micStream); } catch (e) { recorder = null; return; }
+  const idx = cur, chunks = [], job = { url: null, srDone: !SR, heard: [], err: '' };
+  const done = () => {
+    if (!job.url || !job.srDone || job.finished) return;
+    job.finished = true;
+    const text = job.heard.join(' ').trim(), r = { url: job.url };
+    if (!SR) r.note = '이 브라우저는 음성 인식이 없어 점수를 낼 수 없습니다. 녹음 듣기는 됩니다.';
+    else if (text) Object.assign(r, scoreOf(S[idx].en, text), { heard: text });
+    else r.note = job.err === 'not-allowed' || job.err === 'service-not-allowed' ? '음성 인식 권한이 막혀 점수를 내지 못했습니다. 녹음 듣기는 됩니다.'
+      : job.err === 'network' ? '음성 인식 서버에 연결하지 못해 점수를 내지 못했습니다.'
+      : '말소리를 알아듣지 못해 점수를 내지 못했습니다. 조금 더 크게, 마이크 가까이에서 말해 보세요.';
+    if (recs[idx]) URL.revokeObjectURL(recs[idx].url);
+    recs[idx] = r; render();
+  };
+  try { recorder = new MediaRecorder(micStream); } catch (e) { recorder = null; recMsg('⚠ 녹음을 시작하지 못했습니다.', true); return; }
   recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
-  recorder.onstop = () => {
-    if (!chunks.length) return;
-    if (recs[idx]) URL.revokeObjectURL(recs[idx]);
-    recs[idx] = URL.createObjectURL(new Blob(chunks, { type: chunks[0].type }));
-    render();
+  recorder.onstop = () => { if (!chunks.length) return; job.url = URL.createObjectURL(new Blob(chunks, { type: chunks[0].type })); done();
+    setTimeout(() => { job.srDone = true; done(); }, 4000);   // 음성 인식이 끝났다는 신호가 안 와도 녹음은 남긴다
   };
   recorder.start();
+  if (SR) {
+    try {
+      sr = new SR(); sr.lang = 'en-US'; sr.continuous = true; sr.interimResults = false;
+      sr.onresult = e => { for (let k = e.resultIndex; k < e.results.length; k++) if (e.results[k].isFinal) job.heard.push(e.results[k][0].transcript); };
+      sr.onerror = e => { job.err = e.error; };
+      sr.onend = () => { job.srDone = true; done(); };
+      sr.start();
+    } catch (e) { sr = null; job.srDone = true; }
+  }
 }
-function stopRec() { if (recorder && recorder.state !== 'inactive') recorder.stop(); recorder = null; }
-$('recPlay').onclick = () => { if (!recs[cur]) return; cancel(); $('recAudio').src = recs[cur]; $('recAudio').play(); setStatus('내 녹음을 재생합니다.'); };
+function stopRec() {
+  if (recorder && recorder.state !== 'inactive') recorder.stop();
+  recorder = null;
+  if (sr) { try { sr.stop(); } catch (e) {} sr = null; }
+  manual = false; drawRec();
+}
+$('recPlay').onclick = () => { if (!recs[cur]) return; cancel(); $('recAudio').src = recs[cur].url; $('recAudio').play(); setStatus('내 녹음을 재생합니다.'); };
+drawRec();
 
 /* ---------- 버튼 ---------- */
 $('listen').onclick = () => start('listen');
