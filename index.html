@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>영어 쉐도잉 — SpongeBob's Bad Habit</title>
+<style>
+  :root { --bg:#10141c; --panel:#1a2130; --line:#2c3648; --text:#e8ecf3; --sub:#9aa7bd; --acc:#ffd23f; --acc2:#4cc2ff; --red:#ff6b6b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:"Pretendard","Malgun Gothic","Apple SD Gothic Neo",sans-serif; line-height:1.5; }
+  header { padding:12px 16px; border-bottom:1px solid var(--line); display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; }
+  header h1 { font-size:17px; margin:0; }
+  header a { color:var(--acc2); font-size:13px; }
+  main { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,1fr); gap:16px; padding:16px; max-width:1400px; margin:0 auto; }
+  @media (max-width:900px) { main { grid-template-columns:1fr; padding:10px; } }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:12px; }
+  .videoWrap { position:relative; background:#000; border-radius:12px; overflow:hidden; aspect-ratio:16/9; }
+  video { width:100%; height:100%; display:block; }
+  #mask { position:absolute; left:0; right:0; bottom:0; background:#000; display:none; }
+  #connect { position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; gap:10px; background:rgba(0,0,0,.85); text-align:center; padding:16px; }
+  button, select, .fileBtn { font:inherit; color:var(--text); background:#263044; border:1px solid var(--line); border-radius:8px; padding:9px 12px; cursor:pointer; min-height:42px; }
+  button:hover, .fileBtn:hover { border-color:var(--acc2); }
+  button.on { background:var(--acc); color:#1a1a1a; border-color:var(--acc); font-weight:700; }
+  button.main { background:var(--acc2); color:#08202e; border-color:var(--acc2); font-weight:700; }
+  button:disabled { opacity:.45; cursor:default; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .row + .row { margin-top:10px; }
+  .label { color:var(--sub); font-size:13px; min-width:64px; }
+  #phase { display:flex; gap:6px; margin-top:10px; }
+  #phase span { flex:1; text-align:center; padding:7px 4px; border-radius:8px; background:#222b3b; color:var(--sub); font-size:13px; }
+  #phase span.now { background:var(--acc); color:#1a1a1a; font-weight:700; }
+  #bar { height:6px; background:#222b3b; border-radius:3px; margin-top:8px; overflow:hidden; }
+  #bar i { display:block; height:100%; width:0; background:var(--acc2); }
+  #status { color:var(--sub); font-size:13px; margin-top:6px; min-height:20px; }
+  #curEn { font-size:clamp(22px,3.4vw,34px); font-weight:700; line-height:1.3; }
+  #curKo { font-size:clamp(17px,2.2vw,22px); color:var(--acc); margin-top:6px; }
+  .hiddenMsg { color:var(--sub); font-size:15px; font-weight:400; font-style:italic; }
+  #notes { margin-top:10px; font-size:14px; }
+  #notes b { color:var(--acc2); }
+  #notes .pron { margin-top:6px; color:var(--sub); }
+  #list { max-height:calc(100vh - 120px); overflow:auto; padding:0; }
+  @media (max-width:900px) { #list { max-height:none; } }
+  .item { padding:10px 12px; border-bottom:1px solid var(--line); cursor:pointer; }
+  .item:hover { background:#222b3b; }
+  .item.cur { background:#2a3550; border-left:4px solid var(--acc); }
+  .item .t { color:var(--sub); font-size:12px; }
+  .item .ko { color:var(--sub); font-size:14px; }
+  small.note { color:var(--sub); display:block; margin-top:8px; font-size:12.5px; }
+  input[type=file] { display:none; }
+  input[type=checkbox] { width:18px; height:18px; vertical-align:middle; }
+  label.chk { display:inline-flex; gap:6px; align-items:center; cursor:pointer; padding:6px 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎧 영어 쉐도잉 · SpongeBob Can't Stop Biting His Nails!</h1>
+  <a href="https://www.youtube.com/watch?v=9KBIddUmHDU" target="_blank" rel="noopener">유튜브 원본 열기</a>
+  <label class="fileBtn">📁 MP4 파일 선택/재연결<input type="file" id="file" accept="video/mp4,video/*"></label>
+</header>
+
+<main>
+  <section>
+    <div class="videoWrap">
+      <video id="v" src="media/video.mp4" preload="auto" playsinline></video>
+      <div id="mask"></div>
+      <div id="connect">
+        <div><b>영상을 불러오지 못했습니다.</b><br>내려받은 MP4 파일(media/video.mp4)을 직접 선택해 주세요.</div>
+        <label class="fileBtn">📁 MP4 파일 선택<input type="file" id="file2" accept="video/mp4,video/*"></label>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:12px">
+      <div id="curNo" class="label"></div>
+      <div id="curEn"></div>
+      <div id="curKo"></div>
+      <div id="notes"></div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <button id="prev">⏮ 이전</button>
+        <button id="listen" class="main">▶ 듣기</button>
+        <button id="shadow" class="main">🗣 쉐도잉</button>
+        <button id="pause">⏸ 일시정지</button>
+        <button id="stop">⏹ 정지</button>
+        <button id="next">다음 ⏭</button>
+      </div>
+      <div id="phase"><span data-p="listen">① 원본 듣기</span><span data-p="wait">② 따라 말하기</span><span data-p="relisten">③ 다시 듣기</span></div>
+      <div id="bar"><i></i></div>
+      <div id="status">문장을 고르거나 ▶ 듣기를 누르세요.</div>
+    </div>
+
+    <div class="panel">
+      <div class="row"><span class="label">반복</span>
+        <button id="repOn">반복 꺼짐</button>
+        <span id="repCounts">
+          <button data-n="3">3회</button><button data-n="5">5회</button><button data-n="0">무한</button>
+        </span>
+      </div>
+      <div class="row"><span class="label">속도</span>
+        <span id="rates"><button data-r="0.6">0.6배</button><button data-r="0.75">0.75배</button><button data-r="1">1배</button><button data-r="1.25">1.25배</button></span>
+      </div>
+      <div class="row"><span class="label">대기 시간</span>
+        <select id="waitSel">
+          <option value="x1.2">문장 길이 × 1.2</option>
+          <option value="x1.5" selected>문장 길이 × 1.5</option>
+          <option value="x2">문장 길이 × 2</option>
+          <option value="3">3초</option><option value="5">5초</option><option value="8">8초</option><option value="12">12초</option>
+        </select>
+      </div>
+      <div class="row"><span class="label">녹음</span>
+        <label class="chk"><input type="checkbox" id="recOn"> 따라 말할 때 내 목소리 녹음</label>
+        <button id="recPlay" disabled>🔊 내 녹음 듣기</button>
+        <audio id="recAudio"></audio>
+      </div>
+      <div class="row"><span class="label">자막</span>
+        <label class="chk"><input type="checkbox" id="showEn" checked> 영어 원문</label>
+        <label class="chk"><input type="checkbox" id="showKo" checked> 한국어 번역</label>
+      </div>
+      <div class="row"><span class="label">가림막</span>
+        <label class="chk"><input type="checkbox" id="maskOn"> 영상 아래쪽 가리기</label>
+        <input type="range" id="maskH" min="8" max="40" value="18" aria-label="가림막 높이">
+      </div>
+      <small class="note">영상 화면에 처음부터 박혀 있는 자막은 앱에서 지울 수 없습니다. 필요하면 가림막으로 가리세요.</small>
+      <div class="row"><span class="label">구간 보정</span>
+        <button data-adj="s,-0.1">시작 −0.1</button><button data-adj="s,0.1">시작 +0.1</button>
+        <button data-adj="e,-0.1">끝 −0.1</button><button data-adj="e,0.1">끝 +0.1</button>
+        <span id="adjInfo" class="label"></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="list"></section>
+</main>
+
+<script>
+// 문장 데이터: 이 영상(9KBIddUmHDU)의 영어 자막(업로더 제공) + 자동 자막의 단어별 시각을 대조해 정한 구간.
+// s/e = 시작/종료(초), en = 원문, ko = 번역, n = [표현, 뜻] 목록, p = 발음 가이드
+const S = [
+ {s:4.30,e:7.25,en:"I just needed a breath of fresh water.",ko:"신선한 물 한 모금이 필요했을 뿐이야.",n:[["a breath of fresh air","'상쾌한 공기 한 모금'이라는 관용 표현. 바닷속이라 air를 water로 바꾼 말장난"],["I just needed ~","그냥 ~이 필요했을 뿐이야"]],p:"needed a → '니디더'처럼 이어서. breath of → '브레써브'."},
+ {s:16.50,e:17.85,en:"That'll take care of it.",ko:"이러면 해결되겠지.",n:[["take care of ~","~을 처리하다, 해결하다 (돌보다 외의 뜻)"],["That'll","That will의 줄임"]],p:"That'll → '대를'. care of it → '케어러빗'으로 한 덩어리."},
+ {s:21.05,e:25.50,en:"Don't do it. Don't do it! Don't do it!",ko:"하지 마. 하지 마! 하지 말라고!",n:[["Don't do it.","(자기 자신에게) 하지 마. 참으려 애쓸 때 쓰는 말"]],p:"Don't의 t는 거의 들리지 않음: '도운 두잇'. 뒤로 갈수록 강세가 세짐."},
+ {s:37.60,e:39.20,en:"Time for stronger measures.",ko:"더 강력한 조치가 필요한 때야.",n:[["Time for ~","~할 때다 (It's time for ~에서 It's 생략)"],["measures","조치, 대책 (take measures: 조치를 취하다)"]],p:"stronger에 강세. measures → '메져즈'."},
+ {s:41.05,e:43.25,en:"Alright, self, let's see ya get out of that one.",ko:"좋아, 나 자신아, 이건 어떻게 빠져나오나 보자.",n:[["let's see you ~","네가 ~하는지 어디 보자 (도전하듯)"],["get out of ~","~에서 빠져나오다"],["ya","you의 구어체 발음"]],p:"get out of that one → '게라우러 댓원'으로 빠르게 연음."},
+ {s:48.40,e:50.70,en:"Whoa, SpongeBob, are you okay?",ko:"어이쿠, 스폰지밥, 괜찮아?",n:[["Whoa","놀랐을 때 내는 감탄사 '워'"],["Are you okay?","괜찮아? 가장 기본적인 안부 확인"]],p:"are you → '아유'로 약하게, okay 끝을 올려서."},
+ {s:51.85,e:55.15,en:"Fred, your nails. They're so... beautiful.",ko:"프레드, 네 손톱. 정말… 아름다워.",n:[["nails","손톱 (fingernails). '못'이라는 뜻도 있음"],["They're so ~","정말 ~하다 (so로 강조)"]],p:"They're so에서 잠깐 멈춘 뒤 beautiful → '뷰리풀'."},
+ {s:55.70,e:58.95,en:"Aw, thanks. I really pride myself on--",ko:"아, 고마워. 난 정말 자부심이 있거든, 내—",n:[["pride oneself on ~","~을 자랑으로 여기다, ~에 자부심을 갖다"]],p:"pride myself on → '프라이드 마이셀폰'으로 이어서."},
+ {s:72.75,e:74.05,en:"Give me the works, Ethel.",ko:"풀코스로 해 줘요, 에설.",n:[["the works","(서비스·옵션) 전부 다, 풀코스. 미용실·식당에서 자주 씀"]],p:"Give me → '김미'. works에 강세."},
+ {s:74.35,e:77.40,en:"Ugh, my nails are in terrible shape.",ko:"으, 내 손톱 상태가 엉망이야.",n:[["be in terrible shape","상태가 아주 나쁘다 (↔ in good shape)"]],p:"nails are in → '네일자린'. terrible에 강세."},
+ {s:83.00,e:85.25,en:"Ooh, that feels good.",ko:"오, 기분 좋다.",n:[["That feels good.","(감촉·느낌이) 기분 좋다. 마사지 받을 때 등"]],p:"feels good → s와 g 사이를 끊지 말고 '필즈굿'."},
+ {s:98.00,e:101.15,en:"Uh, so... when should we schedule your next appointment?",ko:"어, 그럼… 다음 예약은 언제로 잡을까요?",n:[["schedule an appointment","예약을 잡다"],["When should we ~?","언제 ~할까요?"]],p:"should we → '슈뤼'. schedule은 미국식 '스께쥴'."},
+ {s:109.75,e:112.25,en:"Trying out a new look with your face?",ko:"얼굴로 새로운 스타일 시도 중이야?",n:[["try out ~","~을 시험 삼아 해 보다"],["a new look","새로운 스타일·모습"]],p:"Trying out a → '츄라이나우러'. 문장 끝을 올려 질문으로."},
+ {s:114.15,e:115.30,en:"I like it!",ko:"마음에 들어!",n:[["I like it!","마음에 든다! 가장 흔한 칭찬·호감 표현"]],p:"like it → '라이킷'으로 붙여서."},
+ {s:115.75,e:120.35,en:"Oh, Patrick, I can't stop... biting my fingernails.",ko:"아, 뚱이야, 멈출 수가 없어… 손톱 물어뜯는 걸.",n:[["can't stop ~ing","~하는 걸 멈출 수 없다"],["bite one's nails","손톱을 물어뜯다"]],p:"can't는 미국식 '캔ㅌ'(t 약하게). biting → '바이링'."},
+ {s:124.05,e:126.15,en:"I know just what you need!",ko:"너한테 딱 필요한 게 뭔지 알아!",n:[["just what you need","네게 딱 필요한 것 (just = 정확히, 딱)"]],p:"what you → '와츄'. just에 강세."},
+ {s:133.90,e:138.90,en:"Glove World! makes me forget all my troubles... and my name.",ko:"글러브 월드에 오면 걱정이 전부 사라져… 내 이름도.",n:[["make + 사람 + 동사원형","~가 …하게 만들다"],["forget one's troubles","걱정거리를 잊다"]],p:"makes me → '메익스미'. forget all → '퍼게롤'."},
+ {s:139.60,e:144.10,en:"You're right. I've forgotten all about biting my... nails!",ko:"네 말이 맞아. 까맣게 잊고 있었어, 손톱 물어뜯는… 손톱!",n:[["You're right.","네 말이 맞아"],["forget all about ~","~을 까맣게 잊다"]],p:"forgotten all about → '퍼갓은 올러바웃'. forgotten의 tt는 삼키듯."},
+ {s:157.90,e:160.55,en:"Hey you, gimme that!",ko:"야 너, 그거 내놔!",n:[["gimme","give me의 구어체 (격식 없는 말)"]],p:"gimme that → '기미댓'. 짧고 세게."},
+ {s:161.45,e:166.55,en:"Knuckle 22 to base. We've got a nail-biter in Pinky Land.",ko:"너클 22가 본부에 알린다. 핑키 랜드에 손톱 물어뜯는 자 발생.",n:[["A to base","(무전) A가 본부에 알림"],["We've got ~","~이 있다, ~이 발생했다"],["nail-biter","손톱 물어뜯는 사람. 원래는 '손에 땀을 쥐게 하는 것'이라는 뜻도 있음"]],p:"We've got a → '위브가러'. nail-biter → '네일바이러'."},
+ {s:177.40,e:180.75,en:"I think... I think... I need help.",ko:"아무래도… 아무래도… 도움이 필요한 것 같아.",n:[["I think I need help.","도움이 필요한 것 같아 (스스로 해결이 안 될 때)"]],p:"need help → d를 약하게 '니-헬프'."},
+ {s:193.60,e:199.10,en:"Don't worry, SpongeBob. We'll stop your nail-biting habit quicker than a jet-powered jackrabbit!",ko:"걱정 마, 스폰지밥. 네 손톱 물어뜯는 버릇, 제트 엔진 단 산토끼보다 빨리 고쳐 줄게!",n:[["nail-biting habit","손톱 물어뜯는 버릇"],["quicker than ~","~보다 빨리"],["jackrabbit","산토끼. 다람이 특유의 텍사스식 과장 비유"]],p:"quicker than a → '퀴커대너'. jet-powered jackrabbit은 j 소리를 살려 리듬감 있게."},
+ {s:199.95,e:201.85,en:"This'll keep your fingers out of your kisser.",ko:"이러면 손가락이 입에 못 들어갈 거야.",n:[["keep A out of B","A가 B에 못 들어가게 하다"],["kisser","'입'을 뜻하는 속어"]],p:"This'll → '디쓸'. out of your → '아우러뷰어'."},
+ {s:202.35,e:203.60,en:"I sure hope so.",ko:"정말 그랬으면 좋겠다.",n:[["I hope so.","그랬으면 좋겠다"],["sure","(구어) 정말로 — 강조"]],p:"sure에 강세, hope so는 가볍게."},
+ {s:216.10,e:218.70,en:"Tell me he ain't doing what I think he's doing.",ko:"설마 내가 생각하는 그 짓을 하는 건 아니라고 말해 줘.",n:[["Tell me ~","(믿기 싫을 때) ~라고 말해 줘, 설마 ~는 아니지"],["ain't","isn't/aren't의 비격식 표현 (따라 쓰기보다 알아듣기용)"]],p:"what I think he's → '와라이 띵키즈'. he의 h가 약해짐."},
+ {s:224.60,e:226.70,en:"SpongeBob, that's just plain wrong.",ko:"스폰지밥, 그건 진짜 아니다.",n:[["just plain + 형용사","그야말로, 완전히 ~한 (강조)"]],p:"just plain → t를 삼켜 '저스플레인'. wrong의 w는 소리 나지 않음."},
+ {s:231.25,e:235.70,en:"I guess we're gonna have to watch you like Mr. Krabs watches his bank account!",ko:"집게 사장이 자기 통장 지켜보듯 널 지켜봐야겠네!",n:[["I guess ~","~해야겠네, ~인 것 같아"],["be gonna have to ~","~해야만 할 것이다 (gonna = going to)"],["bank account","은행 계좌"]],p:"we're gonna have to → '워거너 해프터'. bank account → '뱅커카운트'."},
+ {s:263.10,e:266.75,en:"It's high time we got you some professional help.",ko:"이제 정말 전문가의 도움을 받을 때가 됐어.",n:[["It's high time + 과거형","진작 ~했어야 할 때다 (뒤에 과거형 got이 오는 점 주의)"],["professional help","전문가의 도움 (상담·치료)"]],p:"got you → '가츄'. professional은 '프러페셔널' 두 번째 음절 강세."},
+ {s:268.65,e:274.75,en:"This doctor's the best hypnotherapist in Bikini Bottom. He'll sort out your bad habit.",ko:"이 의사 선생님이 비키니 시티 최고의 최면 치료사야. 네 나쁜 버릇을 고쳐 주실 거야.",n:[["hypnotherapist","최면 치료사"],["sort out ~","(문제를) 해결하다, 정리하다"],["bad habit","나쁜 버릇"]],p:"hypnotherapist → '힙노떼러피스트'(떼에 강세). sort out → '쏘라웃'."},
+ {s:274.95,e:277.65,en:"The doctor will see you now, Mr. SquarePants.",ko:"이제 진료실로 들어오세요, 네모바지 씨.",n:[["The doctor will see you now.","병원에서 차례가 됐을 때 쓰는 정해진 표현"]],p:"see you now를 또박또박, will은 약하게."},
+ {s:283.60,e:285.95,en:"Oh, please relax, Mr. SquarePants.",ko:"아, 긴장 푸세요, 네모바지 씨.",n:[["Please relax.","편하게 계세요, 긴장 푸세요"]],p:"relax는 뒤 음절 강세 '릴랙스'."},
+ {s:287.40,e:289.35,en:"Now, what seems to be the trouble?",ko:"자, 어디가 불편하신가요?",n:[["What seems to be the trouble?","의사가 증상을 물을 때 쓰는 정중한 표현 (= What's the problem?)"]],p:"seems to be → '씸즈터비'. to는 아주 약하게."},
+ {s:292.40,e:295.05,en:"I can't stop biting my nails! I don't know what to do!",ko:"손톱 물어뜯는 걸 멈출 수가 없어요! 어떻게 해야 할지 모르겠어요!",n:[["I don't know what to do.","어떻게 해야 할지 모르겠다"],["can't stop ~ing","~을 멈출 수 없다"]],p:"아주 빠른 문장. don't know what to do → '도노 와러두'."},
+ {s:296.50,e:301.75,en:"Well, let us take a peek into your subconscious and see what is causing your problem.",ko:"그럼 당신의 잠재의식을 살짝 들여다보고 무엇이 문제의 원인인지 봅시다.",n:[["take a peek into ~","~을 살짝 들여다보다"],["subconscious","잠재의식"],["cause a problem","문제를 일으키다"]],p:"take a peek into → '테이커 피킨투'. subconscious → '썹칸셔스'."},
+ {s:301.95,e:305.05,en:"Keep your eyes on the watch, Mr. SquarePants.",ko:"시계에서 눈을 떼지 마세요, 네모바지 씨.",n:[["keep one's eyes on ~","~에서 눈을 떼지 않다"],["watch","손목시계 (동사로는 '지켜보다')"]],p:"eyes on the → '아이전더'."},
+ {s:315.70,e:319.05,en:"What seems to be troubling you, Mr. SquarePants?",ko:"무엇이 당신을 괴롭히고 있나요, 네모바지 씨?",n:[["trouble + 사람","~를 괴롭히다, 걱정시키다 (동사 용법)"]],p:"troubling you → '츄러블링 유'. 천천히 낮은 톤으로."},
+ {s:325.55,e:327.65,en:"Why do you want to bite your nails?",ko:"왜 손톱을 물어뜯고 싶은 건가요?",n:[["Why do you want to ~?","왜 ~하고 싶은가요?"]],p:"do you want to → '두유 워너'. bite your → '바이츄어'."},
+ {s:328.05,e:332.30,en:"Stuck in dead-end job. Work in a grease trap.",ko:"앞날 없는 직장에 갇혀 있고. 기름때 구덩이에서 일하고.",n:[["be stuck in ~","~에 갇혀 있다, 벗어나지 못하다"],["dead-end job","발전 가능성 없는 직장 (dead end = 막다른 길)"],["grease trap","기름 찌꺼기 거름통 — 지저분한 식당을 비유"]],p:"최면 상태라 주어 없이 뚝뚝 끊어 말함. dead-end → '데덴'."},
+ {s:344.25,e:347.50,en:"But aren't you SpongeBob, Mr. SquarePants?",ko:"하지만 당신이 스폰지밥 아닌가요, 네모바지 씨?",n:[["Aren't you ~?","당신 ~ 아닌가요? (부정 의문문으로 확인)"]],p:"aren't you → '안츄'."},
+ {s:353.15,e:358.85,en:"Obviously, you have subconsciously internalized Mr. Squidward's problems as your own.",ko:"분명히 당신은 무의식적으로 징징이 씨의 문제를 자기 문제처럼 받아들인 겁니다.",n:[["obviously","분명히, 명백히"],["subconsciously","무의식적으로"],["internalize A as one's own","A를 자기 것으로 내면화하다"]],p:"긴 단어 강세: OB-viously / sub-CON-sciously / in-TER-nalized. as your own → '애쥬어로운'."},
+ {s:359.15,e:363.05,en:"When I snap my fingers, you'll realize you are not Squidward.",ko:"제가 손가락을 튕기면, 당신은 자신이 징징이가 아니란 걸 깨닫게 될 겁니다.",n:[["snap one's fingers","손가락을 튕겨 딱 소리를 내다"],["realize","깨닫다"]],p:"When I → '웨나이'. you'll → '율'. not에 강세."},
+ {s:363.10,e:368.55,en:"You are SpongeBob, and your desire to bite your nails will poof! Disappear.",ko:"당신은 스폰지밥이고, 손톱을 물어뜯고 싶은 욕구는 펑! 하고 사라질 겁니다.",n:[["desire to ~","~하고 싶은 욕구"],["poof","'펑' 하고 사라지는 소리를 나타내는 의성어"]],p:"desire to → '디자이어러'. poof 뒤에 잠깐 쉬고 disappear."},
+ {s:373.45,e:374.70,en:"Am I cured?",ko:"저 다 나은 건가요?",n:[["be cured","(병·버릇이) 치료되다, 낫다"]],p:"Am I → '애마이'. cured → '큐어드'."},
+ {s:375.05,e:376.90,en:"Yeah, you are cured.",ko:"네, 다 나았습니다.",n:[["You are cured.","완치됐습니다 (are를 줄이지 않아 강조)"]],p:"are에 힘을 줘서 확신하는 말투로."},
+ {s:388.45,e:392.40,en:"Giant, delicious fingernails!",ko:"거대하고 맛있는 손톱이다!",n:[["giant","거대한"],["delicious","맛있는"]],p:"giant → '자이언트', delicious → '딜리셔스'. 단어마다 끊어서 감탄하듯."}
+];
+
+const $ = id => document.getElementById(id);
+const v = $('v');
+const fmt = t => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0');
+
+let cur = 0, rate = 1, repOn = false, repN = 3;
+let token = 0;          // 실행 중인 흐름 식별용 (정지·문장 변경 시 증가)
+let seg = null;         // 재생 중인 구간 {start,end,cb}
+let wait = null;        // 따라 말하기 대기 {left,total,cb}
+let run = null;         // {kind:'listen'|'shadow', done}
+let paused = false;
+let adj = {};           // 구간 보정값 {문장번호:{s,e}}
+try { adj = JSON.parse(localStorage.getItem('shadow-adj-9KBIddUmHDU')) || {}; } catch (e) {}
+const recs = {};        // 문장별 녹음 URL
+let micStream = null, recorder = null;
+
+const segOf = i => { const a = adj[i] || { s: 0, e: 0 }; return { start: Math.max(0, S[i].s + a.s), end: S[i].e + a.e }; };
+const setStatus = t => { $('status').textContent = t; };
+const setPhase = p => document.querySelectorAll('#phase span').forEach(el => el.classList.toggle('now', el.dataset.p === p));
+const setBar = r => { $('bar').firstElementChild.style.width = Math.max(0, Math.min(1, r)) * 100 + '%'; };
+
+/* ---------- 화면 그리기 (숨김 설정이면 글자를 아예 넣지 않음) ---------- */
+function render() {
+  const en = $('showEn').checked, ko = $('showKo').checked, x = S[cur];
+  $('curNo').textContent = `문장 ${cur + 1} / ${S.length} · ${fmt(x.s)}`;
+  $('curEn').innerHTML = ''; $('curKo').innerHTML = ''; $('notes').innerHTML = '';
+  if (en) $('curEn').textContent = x.en; else $('curEn').innerHTML = '<span class="hiddenMsg">영어 원문 숨김 — 소리에 집중해 보세요</span>';
+  if (ko) $('curKo').textContent = x.ko; else $('curKo').innerHTML = '<span class="hiddenMsg">한국어 번역 숨김</span>';
+  if (en && ko) {
+    x.n.forEach(([a, b]) => { const d = document.createElement('div'); const s = document.createElement('b'); s.textContent = a; d.append(s, ' — ' + b); $('notes').append(d); });
+  } else {
+    $('notes').innerHTML = '<span class="hiddenMsg">단어·표현 해설은 영어와 한국어를 모두 켜면 보입니다.</span>';
+  }
+  if (en) { const d = document.createElement('div'); d.className = 'pron'; d.textContent = '🔈 발음: ' + x.p; $('notes').append(d); }
+
+  const list = $('list'); list.innerHTML = '';
+  S.forEach((y, i) => {
+    const d = document.createElement('div'); d.className = 'item' + (i === cur ? ' cur' : '');
+    const t = document.createElement('div'); t.className = 't'; t.textContent = `${i + 1} · ${fmt(y.s)}` + (recs[i] ? ' · 🎙 녹음 있음' : ''); d.append(t);
+    if (en) { const e = document.createElement('div'); e.textContent = y.en; d.append(e); }
+    if (ko) { const k = document.createElement('div'); k.className = 'ko'; k.textContent = y.ko; d.append(k); }
+    d.onclick = () => { select(i); start('listen'); };
+    list.append(d);
+  });
+  $('recPlay').disabled = !recs[cur];
+  const a = adj[cur] || { s: 0, e: 0 };
+  $('adjInfo').textContent = `시작 ${a.s >= 0 ? '+' : ''}${a.s.toFixed(1)} / 끝 ${a.e >= 0 ? '+' : ''}${a.e.toFixed(1)}초`;
+}
+function select(i) {
+  cancel();
+  cur = (i + S.length) % S.length;
+  render();
+  const el = document.querySelector('.item.cur');
+  if (el && window.innerWidth > 900) el.scrollIntoView({ block: 'nearest' });
+  if (v.readyState > 0) v.currentTime = segOf(cur).start;
+}
+
+/* ---------- 재생 흐름 ---------- */
+function cancel() {
+  token++; seg = null; wait = null; run = null; paused = false;
+  v.pause(); stopRec();
+  setPhase(''); setBar(0); $('pause').textContent = '⏸ 일시정지';
+}
+function playSeg(cb) {
+  const my = token, s = segOf(cur);
+  seg = null; v.pause(); applyRate();
+  const go = () => {
+    if (my !== token) return;
+    seg = { start: s.start, end: s.end, cb };
+    v.play().catch(() => { seg = null; setStatus('재생이 막혔습니다. ▶ 듣기를 다시 눌러 주세요.'); });
+  };
+  if (Math.abs(v.currentTime - s.start) < 0.005) go();
+  else { v.addEventListener('seeked', go, { once: true }); v.currentTime = s.start; }
+}
+function start(kind) {
+  if (v.readyState === 0 && v.error) { showConnect(); return; }
+  cancel();
+  run = { kind, done: 0 };
+  cycle();
+}
+function total() { return repOn ? repN : 1; }   // 0 = 무한
+function countText() { const t = total(); return t === 1 ? '' : ` (${run.done + 1}/${t === 0 ? '∞' : t})`; }
+function cycle() {
+  setPhase('listen'); setStatus((run.kind === 'shadow' ? '원본을 잘 들어 보세요' : '듣는 중') + countText());
+  playSeg(() => run.kind === 'shadow' ? beginWait() : nextRep());
+}
+function beginWait() {
+  const sel = $('waitSel').value, s = segOf(cur);
+  const sec = sel[0] === 'x' ? Math.max(2, (s.end - s.start) / rate * parseFloat(sel.slice(1))) : parseFloat(sel);
+  setPhase('wait'); startRec();
+  wait = { left: sec * 1000, total: sec * 1000, cb: () => {
+    stopRec(); setPhase('relisten'); setStatus('다시 들으며 비교해 보세요' + countText());
+    playSeg(nextRep);
+  } };
+}
+function nextRep() {
+  run.done++;
+  const t = total();
+  if (t === 0 || run.done < t) return cycle();
+  run = null; setPhase(''); setBar(0);
+  setStatus('끝. 다시 듣거나 다음 문장으로 넘어가세요.');
+}
+function togglePause() {
+  if (!run) return;
+  paused = !paused;
+  if (seg) paused ? v.pause() : v.play();
+  if (recorder && recorder.state !== 'inactive') paused ? recorder.pause() : recorder.resume();
+  $('pause').textContent = paused ? '▶ 계속' : '⏸ 일시정지';
+  if (paused) setStatus('일시정지됨');
+}
+let lastTick = performance.now();
+setInterval(() => {
+  const now = performance.now(), dt = now - lastTick; lastTick = now;
+  if (seg) {
+    setBar((v.currentTime - seg.start) / (seg.end - seg.start));
+    if (!paused && (v.currentTime >= seg.end || v.ended)) { const cb = seg.cb; seg = null; v.pause(); cb(); }
+  } else if (wait && !paused) {
+    wait.left -= dt;
+    setBar(1 - wait.left / wait.total);
+    setStatus(`따라 말하세요 — ${Math.max(0, wait.left / 1000).toFixed(1)}초 남음` + (recorder ? ' · 🔴 녹음 중' : '') + countText());
+    if (wait.left <= 0) { const cb = wait.cb; wait = null; cb(); }
+  }
+}, 20);
+
+/* ---------- 속도 (음높이 유지) ---------- */
+function applyRate() {
+  v.preservesPitch = true; v.mozPreservesPitch = true; v.webkitPreservesPitch = true;
+  v.playbackRate = rate;
+}
+document.querySelectorAll('#rates button').forEach(b => b.onclick = () => {
+  rate = parseFloat(b.dataset.r); applyRate();
+  document.querySelectorAll('#rates button').forEach(o => o.classList.toggle('on', o === b));
+});
+document.querySelector('#rates button[data-r="1"]').classList.add('on');
+
+/* ---------- 반복 ---------- */
+function drawRep() {
+  $('repOn').textContent = repOn ? '반복 켜짐' : '반복 꺼짐'; $('repOn').classList.toggle('on', repOn);
+  document.querySelectorAll('#repCounts button').forEach(o => { o.classList.toggle('on', repOn && +o.dataset.n === repN); o.disabled = !repOn; });
+}
+$('repOn').onclick = () => { repOn = !repOn; drawRep(); };
+document.querySelectorAll('#repCounts button').forEach(b => b.onclick = () => { repN = +b.dataset.n; drawRep(); });
+drawRep();
+
+/* ---------- 녹음 ---------- */
+$('recOn').onchange = async () => {
+  if (!$('recOn').checked) { if (micStream) micStream.getTracks().forEach(t => t.stop()); micStream = null; return; }
+  if (!navigator.mediaDevices || !window.MediaRecorder) { $('recOn').checked = false; return setStatus('이 브라우저에서는 녹음을 쓸 수 없습니다. (크롬·엣지에서 「앱 실행.bat」으로 열어 주세요)'); }
+  try { micStream = await navigator.mediaDevices.getUserMedia({ audio: true }); setStatus('마이크 연결됨. 쉐도잉의 「따라 말하기」 단계에서 자동으로 녹음합니다.'); }
+  catch (e) { $('recOn').checked = false; setStatus('마이크를 쓸 수 없습니다. 브라우저 주소창의 마이크 권한을 허용해 주세요.'); }
+};
+function startRec() {
+  if (!micStream) return;
+  const idx = cur, chunks = [];
+  try { recorder = new MediaRecorder(micStream); } catch (e) { recorder = null; return; }
+  recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+  recorder.onstop = () => {
+    if (!chunks.length) return;
+    if (recs[idx]) URL.revokeObjectURL(recs[idx]);
+    recs[idx] = URL.createObjectURL(new Blob(chunks, { type: chunks[0].type }));
+    render();
+  };
+  recorder.start();
+}
+function stopRec() { if (recorder && recorder.state !== 'inactive') recorder.stop(); recorder = null; }
+$('recPlay').onclick = () => { if (!recs[cur]) return; cancel(); $('recAudio').src = recs[cur]; $('recAudio').play(); setStatus('내 녹음을 재생합니다.'); };
+
+/* ---------- 버튼 ---------- */
+$('listen').onclick = () => start('listen');
+$('shadow').onclick = () => start('shadow');
+$('pause').onclick = togglePause;
+$('stop').onclick = () => { cancel(); if (v.readyState > 0) v.currentTime = segOf(cur).start; setStatus('정지했습니다.'); };
+$('prev').onclick = () => { select(cur - 1); start('listen'); };
+$('next').onclick = () => { select(cur + 1); start('listen'); };
+v.onclick = () => run ? togglePause() : start('listen');
+$('showEn').onchange = $('showKo').onchange = render;
+function drawMask() { $('mask').style.display = $('maskOn').checked ? 'block' : 'none'; $('mask').style.height = $('maskH').value + '%'; }
+$('maskOn').onchange = $('maskH').oninput = drawMask;
+document.querySelectorAll('[data-adj]').forEach(b => b.onclick = () => {
+  const [k, d] = b.dataset.adj.split(','), a = adj[cur] || { s: 0, e: 0 };
+  a[k] = Math.round((a[k] + parseFloat(d)) * 10) / 10;
+  if (S[cur].e + a.e - (S[cur].s + a.s) < 0.3) return;   // 구간이 너무 짧아지지 않게
+  adj[cur] = a;
+  try { localStorage.setItem('shadow-adj-9KBIddUmHDU', JSON.stringify(adj)); } catch (e) {}
+  render(); start('listen');
+});
+
+/* ---------- 로컬 MP4 연결 ---------- */
+function showConnect() { $('connect').style.display = 'flex'; setStatus('영상 파일을 연결해 주세요.'); }
+v.addEventListener('error', showConnect);
+let fileUrl = null;
+function useFile(e) {
+  const f = e.target.files[0]; if (!f) return;
+  if (!f.type.startsWith('video/')) return setStatus('영상 파일(MP4)만 선택할 수 있습니다.');
+  cancel();
+  if (fileUrl) URL.revokeObjectURL(fileUrl);
+  fileUrl = URL.createObjectURL(f);
+  v.src = fileUrl; v.load();
+  $('connect').style.display = 'none';
+  v.addEventListener('loadedmetadata', () => {
+    v.currentTime = segOf(cur).start;
+    setStatus(v.duration < S[S.length - 1].e ? '⚠ 이 파일은 문장 구간보다 짧습니다. 다른 영상일 수 있어요.' : `「${f.name}」 연결됨. ▶ 듣기를 누르세요.`);
+  }, { once: true });
+  e.target.value = '';
+}
+$('file').onchange = $('file2').onchange = useFile;
+
+render();
+</script>
+</body>
+</html>
